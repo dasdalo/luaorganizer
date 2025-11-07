@@ -1,550 +1,1087 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <!--
+    BeautifyLua — Full Single-File App
+    - Robust Lua beautifier (inline -> multiline, indentation, spacing)
+    - Token-aware splitting outside strings/comments
+    - Preserves comments (line + inline)
+    - Single-scroll input with syntax-highlight overlay
+    - Consistent navbar/footer across main + help pages
+    - Light/Dark theme toggle with persistence
+  -->
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>LuaOrganizer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>BeautifyLua</title>
+
   <style>
+    /* ===========================================================
+       THEME VARIABLES
+       =========================================================== */
     :root {
-      --bg:#0d1117; --panel-bg:#161b22; --border:#30363d; --text:#e6edf3;
-      --muted:#8b949e; --radius:6px; --btn-bg:#21262d; --btn-bg-hover:#30363d; --accent:#58a6ff;
+      --bg: #0d1117;
+      --panel-bg: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --radius: 8px;
+      --btn-bg: #21262d;
+      --btn-bg-hover: #30363d;
+      --accent: #58a6ff;
+      --shadow: 0 6px 20px rgba(0,0,0,.25);
     }
+
     body.light {
-      --bg:#f6f8fa; --panel-bg:#ffffff; --border:#d0d7de; --text:#24292f;
-      --muted:#57606a; --btn-bg:#f3f4f6; --btn-bg-hover:#eaecef; --accent:#0969da;
+      --bg: #f6f8fa;
+      --panel-bg: #ffffff;
+      --border: #d0d7de;
+      --text: #24292f;
+      --muted: #57606a;
+      --btn-bg: #f3f4f6;
+      --btn-bg-hover: #eaecef;
+      --accent: #0969da;
+      --shadow: 0 6px 18px rgba(0,0,0,.10);
     }
 
-    * { box-sizing:border-box; margin:0; padding:0; }
-    html, body { height:100%; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
-      color:var(--text); background:var(--bg); transition:background .3s ease, color .3s ease; }
+    /* ===========================================================
+       GLOBAL RESET / BASE
+       =========================================================== */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
 
-    .app-container { display:flex; flex-direction:column; height:100vh; max-width:1200px; margin:0 auto; padding:24px; gap:16px; }
-    .header { flex-shrink:0; border-bottom:1px solid var(--border); padding-bottom:12px; display:flex; justify-content:space-between; align-items:center; }
-    .brand-text { font-weight:600; font-size:20px; }
-    .header-center { color:var(--muted); font-size:14px; text-align:center; flex:1; }
-    .header-right { display:flex; align-items:center; gap:10px; }
+    html, body {
+      height: 100%;
+    }
 
-    a.link { color:var(--muted); font-size:14px; text-decoration:none; border:1px solid var(--border);
-      border-radius:var(--radius); padding:6px 12px; transition:background .2s ease; }
-    a.link:hover { background:var(--btn-bg-hover); color:var(--text); }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      color: var(--text);
+      background: var(--bg);
+      transition: background .3s ease, color .3s ease;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
 
-    .theme-toggle { background:none; border:none; cursor:pointer; padding:6px; border-radius:6px; color:var(--muted); transition:background .2s ease; }
-    .theme-toggle:hover { background:rgba(255,255,255,0.08); }
-    .theme-toggle svg { width:20px; height:20px; fill:currentColor; }
+    a {
+      color: var(--accent);
+      text-decoration: none;
+    }
 
-    .workspace { flex:1 1 auto; min-height:0; display:grid; grid-template-columns:1fr 1fr; gap:16px; }
-    @media (max-width:900px){ .workspace{ grid-template-columns:1fr; } }
+    a:hover {
+      opacity: 0.9;
+    }
 
-    .code-panel { background:var(--panel-bg); border:1px solid var(--border); border-radius:var(--radius); display:flex; flex-direction:column; min-height:0; }
-    .panel-header { padding:12px 16px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; }
-    .panel-title { font-weight:600; font-size:14px; }
-    .panel-actions { display:flex; gap:8px; }
-    .btn { border:1px solid var(--border); border-radius:var(--radius); background:var(--btn-bg); color:var(--text);
-      font-size:13px; padding:6px 12px; cursor:pointer; transition:background .15s ease, border-color .15s ease; }
-    .btn:hover { background:var(--btn-bg-hover); border-color:var(--muted); }
+    /* ===========================================================
+       LAYOUT CONTAINER
+       =========================================================== */
+    .app-container {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 24px;
+      gap: 16px;
+    }
 
-    .organize-btn { background:var(--btn-bg); border:1px solid var(--border); color:var(--text);
-      border-radius:var(--radius); font-size:15px; font-weight:600; padding:10px 24px; cursor:pointer;
-      transition:background .15s ease, border-color .15s ease; }
-    .organize-btn:hover { background:var(--btn-bg-hover); border-color:var(--muted); }
+    /* ===========================================================
+       UNIVERSAL NAVBAR
+       =========================================================== */
+    .header {
+      flex-shrink: 0;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
 
-    .code-area { flex:1 1 auto; overflow:auto; background:var(--panel-bg); position:relative; }
+    .brand-text {
+      font-weight: 800;
+      font-size: 22px;
+      letter-spacing: 0.3px;
+      color: var(--text);
+    }
+
+    .header-center {
+      flex: 1;
+      text-align: center;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .nav-links a {
+      color: var(--muted);
+      font-size: 14px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      transition: background .2s ease, color .2s ease;
+      border: 1px solid var(--border);
+      background: transparent;
+    }
+
+    .nav-links a:hover {
+      color: var(--text);
+      background: var(--btn-bg-hover);
+    }
+
+    .theme-toggle {
+      background: var(--btn-bg);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      cursor: pointer;
+      padding: 6px 8px;
+      color: var(--muted);
+      transition: background .2s ease, border-color .2s ease, color .2s ease;
+    }
+
+    .theme-toggle:hover {
+      background: var(--btn-bg-hover);
+      color: var(--text);
+      border-color: var(--muted);
+    }
+
+    .theme-toggle svg {
+      width: 18px;
+      height: 18px;
+      fill: currentColor;
+      display: block;
+    }
+
+    /* ===========================================================
+       WORKSPACE / PANELS
+       =========================================================== */
+    .workspace {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    @media (max-width: 900px) {
+      .workspace {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .code-panel {
+      background: var(--panel-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      box-shadow: var(--shadow);
+    }
+
+    .panel-header {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .panel-title {
+      font-weight: 700;
+      font-size: 14px;
+      letter-spacing: .2px;
+    }
+
+    .panel-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .btn {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--btn-bg);
+      color: var(--text);
+      font-size: 13px;
+      padding: 6px 12px;
+      cursor: pointer;
+      transition: background .15s ease, border-color .15s ease, transform .05s ease;
+    }
+
+    .btn:hover {
+      background: var(--btn-bg-hover);
+      border-color: var(--muted);
+    }
+
+    .btn:active {
+      transform: translateY(1px);
+    }
+
+    .organize-btn {
+      background: var(--btn-bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 700;
+      padding: 10px 24px;
+      cursor: pointer;
+      transition: background .15s ease, border-color .15s ease, transform .05s ease;
+    }
+
+    .organize-btn:hover {
+      background: var(--btn-bg-hover);
+      border-color: var(--muted);
+    }
+
+    .organize-btn:active {
+      transform: translateY(1px);
+    }
+
+    /* ===========================================================
+       EDITORS (Single-scroll overlay)
+       =========================================================== */
+    .code-area {
+      flex: 1 1 auto;
+      position: relative;
+      border-radius: 0 0 var(--radius) var(--radius);
+      overflow: hidden;
+    }
+
+    .editor-wrap {
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* The textarea is the only scroll container */
     textarea {
-      width:100%; height:100%; padding:16px; border:none; background:transparent; resize:none; outline:none;
-      font-family:'JetBrains Mono','SFMono-Regular',Consolas,monospace; font-size:13px; line-height:1.5; color:var(--text);
-      /* make caret visible even if we hide text color below */
+      position: absolute;
+      inset: 0;
+      padding: 16px;
+      border: none;
+      background: transparent;
+      resize: none;
+      outline: none;
+      font-family: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+      font-size: 13px;
+      line-height: 1.55;
+      color: var(--text);
       caret-color: var(--text);
+      overflow: auto;
+      tab-size: 4;
     }
-    /* Input highlighting overlay setup */
-    .editor-wrap { position:relative; width:100%; height:100%; }
-    .hl-overlay {
-      position:absolute; inset:0; padding:16px; overflow:auto; pointer-events:none; white-space:pre-wrap; word-wrap:break-word;
-      font-family:'JetBrains Mono','SFMono-Regular',Consolas,monospace; font-size:13px; line-height:1.5;
+
+    /* Overlay root doesn't scroll; child content is translated */
+    #inputOverlay {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      overflow: hidden;
+      z-index: 1;
     }
-    /* Show real color via text-shadow; actual color transparent so overlay shows colors */
-    #inputCode { color:transparent; text-shadow:0 0 0 var(--text); }
 
-    /* Output: visible colored <pre> + hidden textarea for copy/stats */
-    #outputView { width:100%; height:100%; padding:16px; margin:0; overflow:auto; white-space:pre-wrap;
-      font-family:'JetBrains Mono','SFMono-Regular',Consolas,monospace; font-size:13px; line-height:1.5; color:var(--text); background:transparent; }
-    #outputCode { position:absolute; top:-9999px; left:-9999px; height:0; width:0; opacity:0; }
+    /* Must match textarea typography & padding exactly */
+    #inputOverlayContent {
+      position: absolute;
+      top: 0;
+      left: 0;
+      padding: 16px;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      font-family: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+      font-size: 13px;
+      line-height: 1.55;
+      color: var(--text);
+      tab-size: 4;
+      will-change: transform;
+    }
 
-    /* Scrollbar (transparent track) */
-    textarea::-webkit-scrollbar, pre::-webkit-scrollbar, .hl-overlay::-webkit-scrollbar { width:10px; background:transparent; }
-    textarea::-webkit-scrollbar-thumb, pre::-webkit-scrollbar-thumb, .hl-overlay::-webkit-scrollbar-thumb { background:transparent; border-radius:6px; }
-    textarea::-webkit-scrollbar-thumb:hover, pre::-webkit-scrollbar-thumb:hover, .hl-overlay::-webkit-scrollbar-thumb:hover { background:rgba(255,255,255,0.1); }
-    body.light textarea::-webkit-scrollbar-thumb:hover, body.light pre::-webkit-scrollbar-thumb:hover, body.light .hl-overlay::-webkit-scrollbar-thumb:hover { background:rgba(0,0,0,0.15); }
+    /* Textarea text invisible (for overlay to show colors) but caret stays */
+    #inputCode {
+      color: transparent;
+      text-shadow: 0 0 0 var(--text);
+      z-index: 2;
+    }
 
-    .panel-footer { border-top:1px solid var(--border); padding:10px 16px; font-size:12px; color:var(--muted);
-      display:flex; justify-content:space-between; align-items:center; }
-    .stats { display:flex; gap:16px; }
-    .stat { display:flex; align-items:center; gap:4px; }
+    /* Output view: visible colored <pre>; hidden textarea carries raw text  */
+    #outputView {
+      position: absolute;
+      inset: 0;
+      padding: 16px;
+      margin: 0;
+      overflow: auto;
+      white-space: pre-wrap;
+      font-family: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+      font-size: 13px;
+      line-height: 1.55;
+      color: var(--text);
+      background: transparent;
+      tab-size: 4;
+    }
 
-    .footer { text-align:center; font-size:12px; color:var(--muted); border-top:1px solid var(--border); padding-top:8px; }
+    #outputCode {
+      position: absolute;
+      top: -9999px;
+      left: -9999px;
+      width: 0;
+      height: 0;
+      opacity: 0;
+    }
 
-    .notification { position:fixed; bottom:24px; right:24px; background:var(--panel-bg); border:1px solid var(--border); border-left:4px solid var(--accent);
-      border-radius:var(--radius); box-shadow:0 4px 12px rgba(0,0,0,.1); padding:12px 16px; display:flex; gap:8px; opacity:0;
-      transform:translateX(200px); transition:all .3s ease; font-weight:600; color:var(--text); z-index:1000; }
-    .notification.show { opacity:1; transform:translateX(0); }
+    .panel-footer {
+      border-top: 1px solid var(--border);
+      padding: 10px 16px;
+      font-size: 12px;
+      color: var(--muted);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
 
-    /* syntax colors */
-    .token-keyword{color:#c678dd;}
-    .token-string{color:#98c379;}
-    .token-number{color:#d19a66;}
-    .token-comment{color:#7f848e;}
-    .token-func{color:#61afef;}
-    .token-bool{color:#56b6c2;}
+    .stats {
+      display: flex;
+      gap: 16px;
+    }
 
-    /* HELP PAGE */
-    .help-page { display:none; flex-direction:column; min-height:100vh; padding:32px; max-width:1100px; margin:0 auto; }
-    .help-header { display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); padding-bottom:14px; }
-    .help-title { font-size:22px; font-weight:700; }
-    .help-content { flex:1; padding-top:24px; }
-    .faq-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
-    @media (max-width:900px){ .faq-grid{ grid-template-columns:1fr; } }
-    .faq { border:1px solid var(--border); border-radius:12px; padding:20px; background:var(--panel-bg); }
-    .faq h2 { font-size:18px; margin-bottom:6px; }
-    .faq p { color:var(--text); opacity:.9; font-size:15px; line-height:1.6; }
-    code { background:rgba(127,127,127,.15); padding:2px 6px; border-radius:6px; }
+    /* ===========================================================
+       FOOTER (UNIVERSAL)
+       =========================================================== */
+    .footer {
+      text-align: center;
+      font-size: 12px;
+      color: var(--muted);
+      border-top: 1px solid var(--border);
+      padding-top: 10px;
+      opacity: 0.85;
+    }
+
+    /* ===========================================================
+       HELP PAGE (FAQ)
+       =========================================================== */
+    .help-page {
+      display: none;
+      flex-direction: column;
+      min-height: 100vh;
+      padding: 24px;
+      max-width: 1100px;
+      margin: 0 auto;
+      gap: 16px;
+    }
+
+    .help-intro h1 {
+      font-size: 24px;
+      margin-bottom: 8px;
+    }
+
+    .help-intro p {
+      color: var(--muted);
+    }
+
+    .faq-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    @media (max-width: 900px) {
+      .faq-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .faq-item {
+      background: var(--panel-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px 18px 16px 18px;
+      transition: background .2s ease, border-color .2s ease, transform .08s ease;
+    }
+
+    .faq-item:hover {
+      background: var(--btn-bg-hover);
+      transform: translateY(-1px);
+    }
+
+    .faq-item h2 {
+      font-size: 16px;
+      margin-bottom: 6px;
+      color: var(--text);
+    }
+
+    .faq-item p {
+      color: var(--muted);
+      line-height: 1.6;
+      font-size: 14px;
+    }
+
+    code {
+      background: rgba(127,127,127,.18);
+      padding: 2px 6px;
+      border-radius: 6px;
+    }
+
+    /* ===========================================================
+       NOTIFICATIONS
+       =========================================================== */
+    .notification {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--panel-bg);
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--accent);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 12px 16px;
+      display: flex;
+      gap: 10px;
+      opacity: 0;
+      transform: translateX(220px);
+      transition: all .28s ease;
+      font-weight: 700;
+      color: var(--text);
+      z-index: 1000;
+    }
+
+    .notification.show {
+      opacity: 1;
+      transform: translateX(0);
+    }
+
+    /* ===========================================================
+       SYNTAX COLORS
+       =========================================================== */
+    .token-keyword { color: #c678dd; }
+    .token-string  { color: #98c379; }
+    .token-number  { color: #d19a66; }
+    .token-comment { color: #7f848e; }
+    .token-func    { color: #61afef; }
+    .token-bool    { color: #56b6c2; }
   </style>
 </head>
 
 <body class="dark">
 
-  <!-- MAIN PAGE -->
+  <!-- =========================================================
+       MAIN PAGE
+       ========================================================= -->
   <div class="app-container" id="mainPage">
+    <!-- Navbar -->
     <div class="header">
-      <div class="brand-text">LuaOrganizer</div>
-      <div class="header-center">Fix spacing, indentation, and convert globals to locals while preserving logic</div>
-      <div class="header-right">
-        <a href="#" id="goHelp" class="link">Help</a>
-        <button class="theme-toggle" id="themeToggle" title="Toggle theme">
-          <svg id="themeIcon" viewBox="0 0 24 24"><path d="M21.64 13a9 9 0 11-8.64-11 7 7 0 008.64 11z"/></svg>
+      <div class="brand-text">BeautifyLua</div>
+      <div class="header-center">Consistently formatted Lua with one click</div>
+      <div class="nav-links">
+        <a href="#" id="goHelp">Help</a>
+        <button class="theme-toggle" id="themeToggle" type="button" title="Toggle theme">
+          <svg id="themeIcon" viewBox="0 0 24 24">
+            <path d="M21.64 13a9 9 0 11-8.64-11 7 7 0 008.64 11z"/>
+          </svg>
         </button>
       </div>
     </div>
 
+    <!-- Workspace -->
     <div class="workspace">
+      <!-- Input Panel -->
       <div class="code-panel">
         <div class="panel-header">
           <div class="panel-title">Input Code</div>
-          <div class="panel-actions"><button id="clearInput" class="btn">Clear</button></div>
+          <div class="panel-actions">
+            <button id="clearInput" class="btn" type="button">Clear</button>
+          </div>
         </div>
+
         <div class="code-area">
           <div class="editor-wrap">
-            <div id="inputOverlay" class="hl-overlay" aria-hidden="true"></div>
+            <!-- Overlay for highlighted text -->
+            <div id="inputOverlay">
+              <div id="inputOverlayContent"></div>
+            </div>
+            <!-- Textarea input -->
             <textarea id="inputCode" placeholder="Paste your Lua code here..."></textarea>
           </div>
         </div>
+
         <div class="panel-footer">
           <div class="stats">
-            <div class="stat"><div>Lines:</div><div id="inputLines">0</div></div>
-            <div class="stat"><div>Characters:</div><div id="inputChars">0</div></div>
+            <div>Lines: <span id="inputLines">0</span></div>
+            <div>Chars: <span id="inputChars">0</span></div>
           </div>
           <div>Lua</div>
         </div>
       </div>
 
+      <!-- Output Panel -->
       <div class="code-panel">
         <div class="panel-header">
-          <div class="panel-title">Organized Output</div>
-          <div class="panel-actions"><button id="copyOutput" class="btn">Copy</button></div>
+          <div class="panel-title">Formatted Output</div>
+          <div class="panel-actions">
+            <button id="copyOutput" class="btn" type="button">Copy</button>
+          </div>
         </div>
+
         <div class="code-area">
           <pre id="outputView" aria-label="Formatted Lua"></pre>
           <textarea id="outputCode" readonly aria-hidden="true"></textarea>
         </div>
+
         <div class="panel-footer">
           <div class="stats">
-            <div class="stat"><div>Lines:</div><div id="outputLines">0</div></div>
-            <div class="stat"><div>Characters:</div><div id="outputChars">0</div></div>
+            <div>Lines: <span id="outputLines">0</span></div>
+            <div>Chars: <span id="outputChars">0</span></div>
           </div>
           <div>Lua</div>
         </div>
       </div>
     </div>
 
-    <div class="action-section" style="text-align:center;">
-      <button id="organizeBtn" class="organize-btn">Organize</button>
+    <!-- Action -->
+    <div style="text-align:center;">
+      <button id="organizeBtn" class="organize-btn" type="button">Beautify</button>
     </div>
 
-    <div class="footer">Lua Code Organizer © 2025 | Fixes Only What's Broken</div>
+    <!-- Footer -->
+    <div class="footer">
+      BeautifyLua © 2025 — Built for Lua Developers
+    </div>
   </div>
 
-  <!-- HELP PAGE -->
+  <!-- =========================================================
+       HELP PAGE
+       ========================================================= -->
   <div class="help-page" id="helpPage">
-    <div class="help-header">
-      <div class="help-title">LuaOrganizer • Help</div>
-      <div>
-        <a href="#" id="goMain" class="link">← Back to Main</a>
-        <button class="theme-toggle" id="helpTheme" title="Toggle theme">
-          <svg viewBox="0 0 24 24"><path d="M21.64 13a9 9 0 11-8.64-11 7 7 0 008.64 11z"/></svg>
+    <div class="header">
+      <div class="brand-text">BeautifyLua</div>
+      <div class="header-center">Your Lua Beautification Assistant</div>
+      <div class="nav-links">
+        <a href="#" id="goMain">Home</a>
+        <button class="theme-toggle" id="helpTheme" type="button" title="Toggle theme">
+          <svg viewBox="0 0 24 24">
+            <path d="M21.64 13a9 9 0 11-8.64-11 7 7 0 008.64 11z"/>
+          </svg>
         </button>
       </div>
     </div>
-    <div class="help-content">
-      <h1 style="font-size:26px;margin-bottom:12px;">Frequently Asked Questions</h1>
-      <p style="color:var(--muted);font-size:16px;margin-bottom:24px;">Quick answers to common questions.</p>
-      <div class="faq-grid">
-        <div class="faq"><h2>What does LuaOrganizer do?</h2><p>It formats Lua code: indentation, spacing, and converts simple globals to <code>local</code>.</p></div>
-        <div class="faq"><h2>Will it change logic?</h2><p>No. Only formatting and obvious local conversions.</p></div>
-        <div class="faq"><h2>How do I use it?</h2><p>Paste your Lua on the left, click <b>Organize</b>, copy the formatted version.</p></div>
-        <div class="faq"><h2>Does it keep comments?</h2><p>Yes. Comments and structure are preserved.</p></div>
-        <div class="faq"><h2>Can I change theme?</h2><p>Yes. Click the moon/sun icon; it syncs with both pages.</p></div>
-        <div class="faq"><h2>Why locals?</h2><p>Locals improve performance and prevent global conflicts in Lua.</p></div>
-      </div>
+
+    <section class="help-intro">
+      <h1>Frequently Asked Questions</h1>
+      <p>Short answers to common questions. If something looks off, share a small snippet and the expected output — we’ll tune the rules.</p>
+    </section>
+
+    <section class="faq-grid">
+      <article class="faq-item">
+        <h2>What does BeautifyLua do?</h2>
+        <p>It expands inline code into readable multi-line blocks, fixes operator spacing, and indents scopes consistently — while preserving logic and comments.</p>
+      </article>
+
+      <article class="faq-item">
+        <h2>Does it change logic?</h2>
+        <p>No. It’s a formatter, not a transpiler. It never rewrites expressions or control flow.</p>
+      </article>
+
+      <article class="faq-item">
+        <h2>Does it preserve comments?</h2>
+        <p>Yes — both full-line and inline comments are preserved and stay attached to the right lines.</p>
+      </article>
+
+      <article class="faq-item">
+        <h2>How do I use it?</h2>
+        <p>Paste Lua in the left panel, click <b>Beautify</b>. Copy the result from the right panel.</p>
+      </article>
+
+      <article class="faq-item">
+        <h2>What patterns are expanded?</h2>
+        <p>Inline <code>if ... then ... else ... end</code>, inline <code>for/while ... do ... end</code>, inline <code>function ... end</code>, and more. One-line statements separated by <code>;</code> are also split.</p>
+      </article>
+
+      <article class="faq-item">
+        <h2>Why convert globals to locals?</h2>
+        <p>Locals are faster and safer in Lua. The conversion here is conservative: only top-level simple assignments become <code>local</code>.</p>
+      </article>
+    </section>
+
+    <div class="footer">
+      BeautifyLua © 2025 — A Lua Formatter for Developers
     </div>
   </div>
 
-  <div id="notification" class="notification"><div>✓</div><div>Code organized successfully!</div></div>
+  <!-- =========================================================
+       TOAST
+       ========================================================= -->
+  <div id="notification" class="notification">
+    <div>✓</div>
+    <div>Done</div>
+  </div>
 
+  <!-- =========================================================
+       SCRIPT
+       ========================================================= -->
   <script>
-  document.addEventListener("DOMContentLoaded", () => {
-    const inputCode = document.getElementById('inputCode');
-    const inputOverlay = document.getElementById('inputOverlay');
-    const outputCode = document.getElementById('outputCode'); // hidden plain text
-    const outputView = document.getElementById('outputView'); // colored view
+    document.addEventListener('DOMContentLoaded', () => {
+      /* -------------------------------------------------------
+         DOM REFS
+         ------------------------------------------------------- */
+      const $ = (id) => document.getElementById(id);
 
-    const organizeBtn = document.getElementById('organizeBtn');
-    const copyOutput = document.getElementById('copyOutput');
-    const clearInput = document.getElementById('clearInput');
+      const inputCode   = $('inputCode');
+      const overlay     = $('inputOverlayContent');
+      const outputView  = $('outputView');
+      const outputCode  = $('outputCode');
 
-    const inputLines = document.getElementById('inputLines');
-    const inputChars = document.getElementById('inputChars');
-    const outputLines = document.getElementById('outputLines');
-    const outputChars = document.getElementById('outputChars');
+      const organizeBtn = $('organizeBtn');
+      const copyBtn     = $('copyOutput');
+      const clearBtn    = $('clearInput');
 
-    const notification = document.getElementById('notification');
-    const themeToggle = document.getElementById('themeToggle');
-    const helpTheme = document.getElementById('helpTheme');
-    const themeIcon = document.getElementById('themeIcon');
-    const mainPage = document.getElementById('mainPage');
-    const helpPage = document.getElementById('helpPage');
-    const goHelp = document.getElementById('goHelp');
-    const goMain = document.getElementById('goMain');
+      const inputLines  = $('inputLines');
+      const inputChars  = $('inputChars');
+      const outputLines = $('outputLines');
+      const outputChars = $('outputChars');
 
-    const INDENT = '    ';
+      const toast       = $('notification');
 
-    function showNotification(message) {
-      notification.children[1].textContent = message;
-      notification.classList.add('show');
-      setTimeout(() => notification.classList.remove('show'), 2200);
-    }
+      const themeToggle = $('themeToggle');
+      const helpTheme   = $('helpTheme');
+      const themeIcon   = $('themeIcon');
 
-    function updateStats() {
-      inputLines.textContent = inputCode.value.split('\n').length;
-      inputChars.textContent = inputCode.value.length;
-      outputLines.textContent = outputCode.value.split('\n').length;
-      outputChars.textContent = outputCode.value.length;
-    }
+      const mainPage    = $('mainPage');
+      const helpPage    = $('helpPage');
+      const goHelp      = $('goHelp');
+      const goMain      = $('goMain');
 
-    function escapeHTML(s){
-      return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    }
+      const INDENT = '    '; // 4 spaces
 
-    // Simple, safe-ish Lua highlighter on already-escaped text
-    function highlightLuaEscaped(escaped){
-      let s = escaped;
-      // strings (double then single) with escapes
-      s = s.replace(/"(?:[^"\\]|\\.)*"/g, m => `<span class="token-string">${m}</span>`);
-      s = s.replace(/'(?:[^'\\]|\\.)*'/g, m => `<span class="token-string">${m}</span>`);
-      // keywords, bools, numbers, common API
-      s = s.replace(/\b(function|local|if|then|else|elseif|for|in|do|end|while|repeat|until|return|break|continue)\b/g, `<span class="token-keyword">$1</span>`);
-      s = s.replace(/\b(true|false|nil)\b/g, `<span class="token-bool">$1</span>`);
-      s = s.replace(/\b(\d+(?:\.\d+)?)\b/g, `<span class="token-number">$1</span>`);
-      s = s.replace(/\b(print|pairs|ipairs|math|string|table|task|coroutine|wait)\b/g, `<span class="token-func">$1</span>`);
-      // comments last (line comments)
-      s = s.replace(/--.*$/gm, m => `<span class="token-comment">${m}</span>`);
-      return s;
-    }
-
-    // Split line into code + trailing comment (first '--' not in string)
-    function splitCodeComment(line){
-      let inS=null;
-      for(let i=0;i<line.length;i++){
-        const c=line[i];
-        if(inS){
-          if(c==='\\'){ i++; }
-          else if(c===inS){ inS=null; }
-        }else{
-          if(c==='\"' || c=="'"){ inS=c; }
-          else if(c==='-' && line[i+1]==='-'){ return { code: line.slice(0,i), comment: line.slice(i) }; }
-        }
+      /* -------------------------------------------------------
+         TOAST
+         ------------------------------------------------------- */
+      function showToast(msg) {
+        toast.children[1].textContent = msg;
+        toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), 2000);
       }
-      return { code: line, comment: '' };
-    }
 
-    // Walk outside strings to split at separators (e.g., ';' or keywords)
-    function splitOutsideStrings(text, matcher){
-      const parts=[]; let buf=''; let inS=null;
-      for(let i=0;i<text.length;i++){
-        const c=text[i];
-        if(inS){
-          buf+=c;
-          if(c==='\\' && i+1<text.length){ buf+=text[++i]; }
-          else if(c===inS){ inS=null; }
-        }else{
-          if(c==='\"' || c=="'"){ inS=c; buf+=c; }
-          else{
-            const m = matcher(text, i);
-            if(m){ // split before/after matched token
-              if(buf.trim()) parts.push(buf.trim());
-              parts.push(m.token); // keep the token as its own part (e.g., 'then', 'else', etc.)
-              i = m.advanceIndex; // jump index
-              buf='';
-            }else{
-              buf+=c;
+      /* -------------------------------------------------------
+         STATS
+         ------------------------------------------------------- */
+      function updateStats() {
+        inputLines.textContent  = inputCode.value.split('\n').length;
+        inputChars.textContent  = inputCode.value.length;
+        outputLines.textContent = outputCode.value.split('\n').length;
+        outputChars.textContent = outputCode.value.length;
+      }
+
+      /* -------------------------------------------------------
+         HTML ESCAPE & SIMPLE HIGHLIGHT (overlay/output)
+         ------------------------------------------------------- */
+      function escapeHTML(s) {
+        return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      }
+
+      function highlightLuaEscaped(escaped) {
+        let s = escaped;
+        // strings
+        s = s.replace(/"(?:[^"\\]|\\.)*"/g, m => `<span class="token-string">${m}</span>`);
+        s = s.replace(/'(?:[^'\\]|\\.)*'/g, m => `<span class="token-string">${m}</span>`);
+        // numbers, keywords, bools, common funcs
+        s = s.replace(/\b(function|local|if|then|else|elseif|for|in|do|end|while|repeat|until|return|break|continue)\b/g, `<span class="token-keyword">$1</span>`);
+        s = s.replace(/\b(true|false|nil)\b/g, `<span class="token-bool">$1</span>`);
+        s = s.replace(/\b(\d+(?:\.\d+)?)\b/g, `<span class="token-number">$1</span>`);
+        s = s.replace(/\b(print|pairs|ipairs|math|string|table|coroutine|task|wait)\b/g, `<span class="token-func">$1</span>`);
+        // comments last
+        s = s.replace(/--.*$/gm, m => `<span class="token-comment">${m}</span>`);
+        return s;
+      }
+
+      function renderColoredInto(el, text) {
+        el.innerHTML = highlightLuaEscaped(escapeHTML(text));
+      }
+
+      /* -------------------------------------------------------
+         OVERLAY SYNC (single-scroll)
+         ------------------------------------------------------- */
+      function syncOverlay() {
+        renderColoredInto(overlay, inputCode.value);
+        // translate overlay content to mirror textarea scroll
+        overlay.style.transform = `translate(${-inputCode.scrollLeft}px, ${-inputCode.scrollTop}px)`;
+      }
+
+      /* -------------------------------------------------------
+         LEXICAL HELPERS (string/comment aware scans)
+         ------------------------------------------------------- */
+
+      // Split a line into {code, comment} by first -- outside strings
+      function splitCodeComment(line) {
+        let inS = null; // '"' or "'"
+        for (let i = 0; i < line.length; i++) {
+          const c = line[i];
+          if (inS) {
+            if (c === '\\\\') i++;
+            else if (c === inS) inS = null;
+          } else {
+            if (c === '"' || c === "'") inS = c;
+            else if (c === '-' && line[i + 1] === '-') {
+              return { code: line.slice(0, i), comment: line.slice(i) };
             }
           }
         }
+        return { code: line, comment: '' };
       }
-      if(buf.trim()) parts.push(buf.trim());
-      return parts;
-    }
 
-    // Split multiple statements on ';' (outside strings)
-    function splitStatements(line){
-      const result=[]; let buf=''; let inS=null;
-      for(let i=0;i<line.length;i++){
-        const c=line[i];
-        if(inS){
-          buf+=c;
-          if(c==='\\'){ if(i+1<line.length){ buf+=line[++i]; } }
-          else if(c===inS){ inS=null; }
-        }else{
-          if(c==='\"' || c=="'"){ inS=c; buf+=c; }
-          else if(c===';'){ if(buf.trim()) result.push(buf.trim()); buf=''; }
-          else{ buf+=c; }
-        }
-      }
-      if(buf.trim()) result.push(buf.trim());
-      return result;
-    }
-
-    // Insert hard line breaks at inline block keywords (then/do/else/elseif/end/until) so we can indent cleanly.
-    function explodeInlineBlocks(code){
-      // Build a token stream where keywords become standalone tokens.
-      const tokens = splitOutsideStrings(code, (text, i) => {
-        const rest = text.slice(i);
-        const kws = ['then','do','else','elseif','end','until'];
-        for(const kw of kws){
-          if(rest.startsWith(kw) && /\b/.test(rest[kw.length] || '')){
-            return { token: `__KW__${kw}__`, advanceIndex: i + kw.length - 1 };
+      // Split by a single-character delimiter (e.g., ';') outside strings
+      function splitOutsideStrings(text, delimiter) {
+        const out = [];
+        let buf = '';
+        let inS = null;
+        for (let i = 0; i < text.length; i++) {
+          const c = text[i];
+          if (inS) {
+            buf += c;
+            if (c === '\\\\') {
+              if (i + 1 < text.length) buf += text[++i];
+            } else if (c === inS) {
+              inS = null;
+            }
+          } else {
+            if (c === '"' || c === "'") {
+              inS = c;
+              buf += c;
+            } else if (c === delimiter) {
+              if (buf.trim()) out.push(buf.trim());
+              buf = '';
+            } else {
+              buf += c;
+            }
           }
+        }
+        if (buf.trim()) out.push(buf.trim());
+        return out;
+      }
+
+      // Normalize spaces around operators (outside strings)
+      function tidyOperatorSpacing(code) {
+        let out = '';
+        let inS = null;
+        for (let i = 0; i < code.length; i++) {
+          const ch = code[i];
+          if (inS) {
+            out += ch;
+            if (ch === '\\\\' && i + 1 < code.length) out += code[++i];
+            else if (ch === inS) inS = null;
+          } else {
+            if (ch === '"' || ch === "'") {
+              inS = ch;
+              out += ch;
+            } else {
+              out += ch;
+            }
+          }
+        }
+        // punctuation spacing
+        return out
+          .replace(/([^<>=!~])=([^=])/g, '$1 = $2')
+          .replace(/==/g, ' == ')
+          .replace(/~=/g, ' ~= ')
+          .replace(/<=/g, ' <= ')
+          .replace(/>=/g, ' >= ')
+          .replace(/([^\s])([+\-*/%])(?![=])/g, '$1 $2 ')
+          .replace(/([+\-*/%])(?![=])([^\s])/g, '$1 $2')
+          .replace(/,(\S)/g, ', $1')
+          .replace(/\s{2,}/g, ' ')
+          .trim();
+      }
+
+      // Detect inline "if ... then ... [else ...] end" on one line and expand
+      function expandInlineIf(line) {
+        // Quick bail if there's newline already
+        if (/\n/.test(line)) return null;
+
+        // Work outside strings/comments: use the code-only part
+        const { code, comment } = splitCodeComment(line);
+        let m = code.match(/^\s*if\s+(.*?)\s+then\s+(.*?)(?:\s+else\s+(.*?))?\s*end\s*$/);
+        if (!m) return null;
+
+        const cond = m[1].trim();
+        const thenPart = m[2].trim();
+        const elsePart = (m[3] || '').trim();
+
+        const pieces = [];
+        pieces.push(`if ${cond} then`);
+        if (thenPart) pieces.push(INDENT + thenPart);
+        if (elsePart) {
+          pieces.push(`else`);
+          pieces.push(INDENT + elsePart);
+        }
+        pieces.push(`end`);
+
+        const joined = pieces.join('\n') + (comment ? ' ' + comment : '');
+        return joined;
+      }
+
+      // Detect inline for/while ... do ... end
+      function expandInlineLoop(line) {
+        const { code, comment } = splitCodeComment(line);
+        let m = code.match(/^\s*(for\s+.*?\s+do)\s+(.*?)\s*end\s*$/);
+        if (m) {
+          const head = m[1].trim();
+          const body = m[2].trim();
+          const out = `${head}\n${INDENT}${body}\nend` + (comment ? ' ' + comment : '');
+          return out;
+        }
+        m = code.match(/^\s*(while\s+.*?\s+do)\s+(.*?)\s*end\s*$/);
+        if (m) {
+          const head = m[1].trim();
+          const body = m[2].trim();
+          const out = `${head}\n${INDENT}${body}\nend` + (comment ? ' ' + comment : '');
+          return out;
         }
         return null;
-      });
-
-      // Rebuild with newlines around those keywords if needed.
-      const out=[];
-      for(let t of tokens){
-        const m = t.match(/^__KW__(.+)__$/);
-        if(m){
-          const kw = m[1];
-          // ensure keyword is its own line
-          out.push(kw);
-        }else{
-          out.push(t);
-        }
       }
-      // Now join with sentinel and re-split to lines around the keywords.
-      // We'll turn ... "if x then" "print(x)" "else" "end" ... into 4 separate lines.
-      const final=[];
-      for(let i=0;i<out.length;i++){
-        const t = out[i];
-        if(['then','do','else','elseif','end','until'].includes(t)){
-          final.push(t);
-        }else{
-          final.push(t);
+
+      // Detect inline function ... end
+      function expandInlineFunction(line) {
+        const { code, comment } = splitCodeComment(line);
+        // function name(...) <body> end
+        let m = code.match(/^\s*function\s+([A-Za-z_]\w*(?:[:.][A-Za-z_]\w*)*)\s*(\([^)]*\))\s+(.*?)\s*end\s*$/);
+        if (m) {
+          const name = m[1];
+          const params = m[2];
+          const body = m[3].trim();
+          const out = `function ${name}${params}\n${INDENT}${body}\nend` + (comment ? ' ' + comment : '');
+          return out;
         }
+        // local function (...) syntax (anonymous assignment is uncommon, skip)
+        return null;
       }
-      // Return as sequence of "statements" (not yet indented)
-      return final;
-    }
 
-    function tidyOperatorSpacing(code){
-      // Outside strings only
-      let result=''; let inS=null;
-      for(let i=0;i<code.length;i++){
-        const ch=code[i];
-        if(inS){
-          result+=ch;
-          if(ch==='\\' && i+1<code.length){ result+=code[++i]; }
-          else if(ch===inS){ inS=null; }
-        }else{
-          if(ch==='\"' || ch=="'"){ inS=ch; result+=ch; }
-          else{ result+=ch; }
-        }
+      // Split semicolon-separated statements on a single line into lines
+      function expandSemicolons(line) {
+        const { code, comment } = splitCodeComment(line);
+        const parts = splitOutsideStrings(code, ';');
+        if (parts.length <= 1) return null;
+        const lines = parts.map(p => p.trim()).filter(Boolean);
+        const joined = lines.join('\n') + (comment ? ' ' + comment : '');
+        return joined;
       }
-      return result
-        .replace(/([^<>=!~])=([^=])/g, '$1 = $2')
-        .replace(/==/g, ' == ').replace(/~=/g, ' ~= ')
-        .replace(/<=/g, ' <= ').replace(/>=/g, ' >= ')
-        .replace(/([^\s])([+\-*/%])(?![=])/g, '$1 $2 ')
-        .replace(/([+\-*/%])(?![=])([^\s])/g, '$1 $2')
-        .replace(/,(\S)/g, ', $1')
-        .replace(/\s{2,}/g, ' ')
-        .trim();
-    }
 
-    function beautifyLua(source){
-      const lines = source.split('\n');
-      const out = [];
-      let indent = 0;
+      // Conservative global->local conversion (top-level simple assignment)
+      function maybeLocalizeAssignment(s) {
+        if (/^\s*local\b/.test(s)) return s;
+        if (/^\s*for\b/.test(s)) return s;
+        if (/^\s*function\b/.test(s)) return s;
+        const m = s.match(/^\s*([A-Za-z_]\w*)\s*=/);
+        if (!m) return s;
+        // avoid dotted/colon names
+        if (s.includes('.') || s.includes(':')) return s;
+        return 'local ' + s;
+      }
 
-      for (let raw of lines){
-        if(raw.trim()===''){ out.push(''); continue; }
+      /* -------------------------------------------------------
+         BEAUTIFIER (multi-phase; token-aware)
+         ------------------------------------------------------- */
+      function beautifyLua(source) {
+        // Normalize line endings
+        let text = source.replace(/\r\n?/g, '\n');
 
-        // split comment away
-        const parts = splitCodeComment(raw);
-        let code = parts.code.trim();
-        const comment = parts.comment; // keep original spacing
+        // Pass 1: expand obvious inline patterns and split semicolons into separate lines
+        // We repeatedly apply expansions until stable (to catch nested patterns)
+        function applyExpansionsOnce(str) {
+          const lines = str.split('\n');
+          const out = [];
 
-        if(code===''){ // line is only comment
-          out.push(INDENT.repeat(indent) + comment.trim());
-          continue;
-        }
-
-        // split into multiple statements by ';'
-        const statements = splitStatements(code);
-
-        for (let stmt of statements){
-          if(!stmt) continue;
-
-          // explode inline blocks (so "if cond then print() end" becomes lines: if cond then | print() | end)
-          const exploded = explodeInlineBlocks(stmt);
-
-          // process each mini-part (some are keywords, some are code segments)
-          for (let piece of exploded){
-            let s = piece;
-
-            // pre-dedent for end/until and also for else/elseif (they close previous block)
-            if (/^(end|until)$/.test(s) || /^(else|elseif)$/.test(s)) {
-              indent = Math.max(0, indent - 1);
+          for (let raw of lines) {
+            if (!raw.trim()) {
+              out.push(raw);
+              continue;
             }
 
-            // if piece is not a pure keyword line, tidy spaces
-            if (!/^(then|do|else|elseif|end|until)$/.test(s)) {
-              s = tidyOperatorSpacing(s);
+            // Try inline if
+            let expanded = expandInlineIf(raw);
+            if (!expanded) expanded = expandInlineLoop(raw);
+            if (!expanded) expanded = expandInlineFunction(raw);
+            if (!expanded) expanded = expandSemicolons(raw);
 
-              // super conservative global->local (top-level simple name only, no dots/colons)
-              if (/^[A-Za-z_]\w*\s*=/.test(s) && !/^\s*local\b/.test(s) &&
-                  !/^\s*for\b/.test(s) && !/^\s*function\b/.test(s) &&
-                  !s.includes('.') && !s.includes(':')) {
-                s = 'local ' + s;
-              }
-            }
+            out.push(expanded ? expanded : raw);
+          }
 
-            // push current line
-            out.push(INDENT.repeat(indent) + s);
+          return out.join('\n');
+        }
 
-            // post-indent rules
-            if (/^(else|elseif)$/.test(s)) {
-              indent++; // block continues after else/elseif
-            } else if (/^\s*if\b/.test(s) && s.endsWith('then')) {
-              indent++;
-            } else if ((/^\s*for\b/.test(s) || /^\s*while\b/.test(s)) && (s.endsWith('do') || /\bdo\b/.test(s))) {
-              indent++;
-            } else if (/^\s*do$/.test(s)) {
-              indent++;
-            } else if (/^\s*repeat$/.test(s)) {
-              indent++;
-            } else if (/^\s*function\b/.test(s) && !/\bend\b/.test(s)) {
-              indent++;
-            }
+        // Iterate expansions until no changes
+        let prev = text;
+        for (let i = 0; i < 4; i++) { // cap iterations to prevent runaway (usually 1–2 rounds)
+          const next = applyExpansionsOnce(prev);
+          if (next === prev) break;
+          prev = next;
+        }
+        text = prev;
+
+        // Pass 2: per-line formatting (operator spacing, localize simple assigns)
+        const rawLines = text.split('\n');
+        const spacedLines = rawLines.map(line => {
+          const { code, comment } = splitCodeComment(line);
+          let s = code.trim();
+
+          // operator spacing (outside strings)
+          s = tidyOperatorSpacing(s);
+
+          // localize simple top-level assignments
+          if (s) s = maybeLocalizeAssignment(s);
+
+          // Re-attach comment
+          if (comment) {
+            if (s.length === 0) return comment.trim();
+            return s + ' ' + comment.trim();
+          }
+          return s;
+        });
+
+        // Pass 3: indentation based on block structure
+        const out = [];
+        let indent = 0;
+
+        for (let raw of spacedLines) {
+          const line = raw.trim();
+
+          // Keep empty lines
+          if (line === '') {
+            out.push('');
+            continue;
+          }
+
+          // Pre-dedent tokens — lines that start a closing or midway token
+          // These reduce indentation before printing the line.
+          const preDedent = /^(end|until|else|elseif)\b/;
+
+          if (preDedent.test(line)) {
+            indent = Math.max(0, indent - 1);
+          }
+
+          // Emit line at current indent
+          out.push(INDENT.repeat(indent) + line);
+
+          // Post-indent tokens — lines that open a block
+          // 'else'/'elseif' continue the block -> they pre-dedent and then re-indent
+          const opensIfThen    = /^\s*if\b.*\bthen\s*$/.test(line);
+          const opensDoBlock   = /^\s*(for|while)\b.*\bdo\s*$/.test(line);
+          const opensFunction  = /^\s*function\b/.test(line) && !/\bend\b/.test(line);
+          const opensRepeat    = /^\s*repeat\s*$/.test(line);
+          const isElseOrElseIf = /^(else|elseif)\b/.test(line);
+
+          if (opensIfThen || opensDoBlock || opensFunction || opensRepeat || isElseOrElseIf) {
+            indent++;
           }
         }
 
-        // attach trailing comment to last emitted line from this source line (if any)
-        if (comment) {
-          const last = out.length - 1;
-          out[last] = out[last] + ' ' + comment.trim();
+        return out.join('\n');
+      }
+
+      /* -------------------------------------------------------
+         OUTPUT RENDER
+         ------------------------------------------------------- */
+      function renderOutput(luaText) {
+        renderColoredInto(outputView, luaText);
+        outputCode.value = luaText;
+        updateStats();
+      }
+
+      /* -------------------------------------------------------
+         EVENTS
+         ------------------------------------------------------- */
+      inputCode.addEventListener('input', () => {
+        syncOverlay();
+        updateStats();
+      });
+
+      inputCode.addEventListener('scroll', () => {
+        syncOverlay();
+      });
+
+      organizeBtn.addEventListener('click', () => {
+        const code = inputCode.value.trim();
+        if (!code) {
+          showToast('Paste some Lua first');
+          return;
         }
+        try {
+          const formatted = beautifyLua(code);
+          renderOutput(formatted);
+          showToast('Code formatted successfully!');
+        } catch (err) {
+          console.error(err);
+          showToast('Formatting error');
+        }
+      });
+
+      copyBtn.addEventListener('click', async () => {
+        if (!outputCode.value) {
+          showToast('Nothing to copy');
+          return;
+        }
+        try {
+          await navigator.clipboard.writeText(outputCode.value);
+          showToast('Copied!');
+        } catch {
+          showToast('Clipboard error');
+        }
+      });
+
+      clearBtn.addEventListener('click', () => {
+        inputCode.value = '';
+        overlay.innerHTML = '';
+        outputView.textContent = '';
+        outputCode.value = '';
+        updateStats();
+        showToast('Cleared');
+      });
+
+      /* -------------------------------------------------------
+         THEME + PAGE SWITCH
+         ------------------------------------------------------- */
+      function setTheme(light) {
+        document.body.classList.toggle('light', light);
+        themeIcon.innerHTML = light
+          ? '<path d="M12 18a6 6 0 100-12 6 6 0 000 12zm0-16a1 1 0 011 1v2a1 1 0 01-2 0V3a1 1 0 011-1zm0 18a1 1 0 011 1v2a1 1 0 01-2 0v-2a1 1 0 011-1zm9-9a1 1 0 01-1 1h-2a1 1 0 110-2h2a1 1 0 011 1zM6 12a1 1 0 01-1 1H3a1 1 0 110-2h2a1 1 0 011 1z"/>'
+          : '<path d="M21.64 13a9 9 0 11-8.64-11 7 7 0 008.64 11z"/>';
+        if (helpTheme) helpTheme.innerHTML = `<svg viewBox="0 0 24 24">${themeIcon.innerHTML}</svg>`;
+        localStorage.setItem('theme', light ? 'light' : 'dark');
       }
 
-      return out.join('\n');
-    }
+      themeToggle.addEventListener('click', () => setTheme(!document.body.classList.contains('light')));
+      if (helpTheme) helpTheme.addEventListener('click', () => setTheme(!document.body.classList.contains('light')));
 
-    function renderColoredInto(el, text){
-      const escaped = escapeHTML(text);
-      el.innerHTML = highlightLuaEscaped(escaped);
-    }
+      const savedTheme = localStorage.getItem('theme') === 'light';
+      setTheme(savedTheme);
 
-    // INPUT coloring: overlay follows the textarea content/scroll
-    function syncInputOverlay(){
-      renderColoredInto(inputOverlay, inputCode.value);
-      inputOverlay.scrollTop = inputCode.scrollTop;
-      inputOverlay.scrollLeft = inputCode.scrollLeft;
-    }
+      function openHelp(e) { e.preventDefault(); mainPage.style.display = 'none'; helpPage.style.display = 'flex'; }
+      function openMain(e) { e.preventDefault(); helpPage.style.display = 'none'; mainPage.style.display = 'flex'; }
 
-    // OUTPUT coloring
-    function renderOutput(luaText){
-      renderColoredInto(outputView, luaText);
-      outputCode.value = luaText; // hidden plain text for copy/stats
-      updateStats();
-    }
+      goHelp.addEventListener('click', openHelp);
+      goMain.addEventListener('click', openMain);
 
-    // Events
-    inputCode.addEventListener('input', () => { syncInputOverlay(); updateStats(); });
-    inputCode.addEventListener('scroll', () => { inputOverlay.scrollTop = inputCode.scrollTop; inputOverlay.scrollLeft = inputCode.scrollLeft; });
-
-    organizeBtn.addEventListener('click', () => {
-      const code = inputCode.value.trim();
-      if (!code) { showNotification('Please enter Lua code'); return; }
-      try {
-        const formatted = beautifyLua(code);
-        renderOutput(formatted);
-        showNotification('Code organized successfully!');
-      } catch (e) {
-        console.error(e);
-        showNotification('Error organizing code');
-      }
-    });
-
-    copyOutput.addEventListener('click', async () => {
-      if (!outputCode.value) { showNotification('No code to copy'); return; }
-      try { await navigator.clipboard.writeText(outputCode.value); showNotification('Code copied!'); }
-      catch { showNotification('Clipboard error'); }
-    });
-
-    clearInput.addEventListener('click', () => {
-      inputCode.value = '';
-      syncInputOverlay();
-      outputCode.value = '';
-      outputView.textContent = '';
-      updateStats();
-      showNotification('Cleared');
-    });
-
-    // THEME + page switch
-    function setTheme(light) {
-      document.body.classList.toggle('light', light);
-      themeIcon.innerHTML = light
-        ? '<path d="M12 18a6 6 0 100-12 6 6 0 000 12zm0-16a1 1 0 011 1v2a1 1 0 01-2 0V3a1 1 0 011-1zm0 18a1 1 0 011 1v2a1 1 0 01-2 0v-2a1 1 0 011-1zm9-9a1 1 0 01-1 1h-2a1 1 0 110-2h2a1 1 0 011 1zM6 12a1 1 0 01-1 1H3a1 1 0 110-2h2a1 1 0 011 1z"/>'
-        : '<path d="M21.64 13a9 9 0 11-8.64-11 7 7 0 008.64 11z"/>';
-      helpTheme.innerHTML = `<svg viewBox="0 0 24 24">${themeIcon.innerHTML}</svg>`;
-      localStorage.setItem('theme', light ? 'light' : 'dark');
-    }
-    themeToggle.addEventListener('click', () => setTheme(!document.body.classList.contains('light')));
-    helpTheme.addEventListener('click', () => setTheme(!document.body.classList.contains('light')));
-    setTheme(localStorage.getItem('theme') === 'light');
-
-    goHelp.addEventListener('click', e => { e.preventDefault(); mainPage.style.display='none'; helpPage.style.display='flex'; });
-    goMain.addEventListener('click', e => { e.preventDefault(); helpPage.style.display='none'; mainPage.style.display='flex'; });
-
-    // Seed example
-    inputCode.value = `m=5
+      /* -------------------------------------------------------
+         SEED EXAMPLE
+         ------------------------------------------------------- */
+      inputCode.value =
+`-- Try me:
+m=5
 nums={1,2,3}
 for i=1,#nums do m=m+nums[i] end
 if m>10 then print("big")else print("small")end
-x=1;y=2;z=x+y
 arr={1,2,3} for k,v in pairs(arr)do print(k,v)end -- inline
 -- function example
 function foo(a,b) if a>b then return a else return b end end
-repeat x=x+1 until x>10`;
-    syncInputOverlay();
-    updateStats();
-  });
+repeat m=m+1 until m>10`;
+
+      syncOverlay();
+      updateStats();
+    });
   </script>
 </body>
 </html>
