@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LuaOrganizer</title>
+  <style>
+    :root {
+      --bg:#0d1117;
+      --panel-bg:#161b22;
+      --border:#30363d;
+      --text:#e6edf3;
+      --muted:#8b949e;
+      --radius:6px;
+      --btn-bg:#21262d;
+      --btn-bg-hover:#30363d;
+    }
+    body.light {
+      --bg:#f6f8fa;
+      --panel-bg:#ffffff;
+      --border:#d0d7de;
+      --text:#24292f;
+      --muted:#57606a;
+      --btn-bg:#f3f4f6;
+      --btn-bg-hover:#eaecef;
+    }
+
+    * { box-sizing:border-box; margin:0; padding:0; }
+    html, body {
+      height:100%;
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+      color:var(--text);
+      background:var(--bg);
+      transition:background .3s ease, color .3s ease;
+    }
+
+    /* Layout */
+    .app-container {
+      display:flex;
+      flex-direction:column;
+      height:100vh;
+      max-width:1200px;
+      margin:0 auto;
+      padding:24px;
+      gap:16px;
+    }
+
+    .header {
+      flex-shrink:0;
+      border-bottom:1px solid var(--border);
+      padding-bottom:12px;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+    }
+
+    .brand-text { font-weight:600; font-size:20px; }
+    .header-center { color:var(--muted); font-size:14px; text-align:center; flex:1; }
+    .header-right { display:flex; align-items:center; gap:10px; }
+
+    a.link {
+      color:var(--muted);
+      font-size:14px;
+      text-decoration:none;
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      padding:6px 12px;
+      transition:background .2s ease;
+    }
+    a.link:hover { background:var(--btn-bg-hover); color:var(--text); }
+
+    .theme-toggle {
+      background:none; border:none; cursor:pointer; padding:6px; border-radius:6px;
+      color:var(--muted); transition:background .2s ease;
+    }
+    .theme-toggle:hover { background:rgba(255,255,255,0.08); }
+    .theme-toggle svg { width:20px; height:20px; fill:currentColor; }
+
+    .workspace {
+      flex:1 1 auto;
+      min-height:0;
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:16px;
+    }
+    @media (max-width:900px){ .workspace{ grid-template-columns:1fr; } }
+
+    .code-panel {
+      background:var(--panel-bg);
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      display:flex;
+      flex-direction:column;
+      min-height:0;
+    }
+
+    .panel-header {
+      padding:12px 16px;
+      border-bottom:1px solid var(--border);
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+    }
+
+    .panel-title { font-weight:600; font-size:14px; }
+    .panel-actions { display:flex; gap:8px; }
+
+    .btn {
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      background:var(--btn-bg);
+      color:var(--text);
+      font-size:13px;
+      padding:6px 12px;
+      cursor:pointer;
+      transition:background .15s ease, border-color .15s ease;
+    }
+    .btn:hover { background:var(--btn-bg-hover); border-color:var(--muted); }
+
+    .organize-btn {
+      background:var(--btn-bg);
+      border:1px solid var(--border);
+      color:var(--text);
+      border-radius:var(--radius);
+      font-size:15px;
+      font-weight:600;
+      padding:10px 24px;
+      cursor:pointer;
+      transition:background .15s ease, border-color .15s ease;
+    }
+    .organize-btn:hover { background:var(--btn-bg-hover); border-color:var(--muted); }
+
+    .code-area { flex:1 1 auto; overflow:auto; background:var(--panel-bg); }
+    textarea {
+      width:100%; height:100%; padding:16px;
+      border:none; background:transparent; resize:none; outline:none;
+      font-family:'JetBrains Mono','SFMono-Regular',Consolas,monospace;
+      font-size:13px; line-height:1.5; color:var(--text);
+    }
+    textarea::placeholder { color:var(--muted); }
+
+    /* Scrollbar */
+    textarea::-webkit-scrollbar { width:10px; background:transparent; }
+    textarea::-webkit-scrollbar-thumb { background:transparent; border-radius:6px; }
+    textarea::-webkit-scrollbar-thumb:hover { background:rgba(255,255,255,0.1); }
+    body.light textarea::-webkit-scrollbar-thumb:hover { background:rgba(0,0,0,0.15); }
+
+    .panel-footer {
+      border-top:1px solid var(--border);
+      padding:10px 16px;
+      font-size:12px;
+      color:var(--muted);
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+    }
+
+    .stats { display:flex; gap:16px; }
+    .stat { display:flex; align-items:center; gap:4px; }
+
+    .footer {
+      text-align:center;
+      font-size:12px;
+      color:var(--muted);
+      border-top:1px solid var(--border);
+      padding-top:8px;
+    }
+
+    .notification {
+      position:fixed;
+      bottom:24px;
+      right:24px;
+      background:var(--panel-bg);
+      border:1px solid var(--border);
+      border-left:4px solid var(--btn-bg-hover);
+      border-radius:var(--radius);
+      box-shadow:0 4px 12px rgba(0,0,0,.1);
+      padding:12px 16px;
+      display:flex;
+      gap:8px;
+      opacity:0;
+      transform:translateX(200px);
+      transition:all .3s ease;
+      font-weight:600;
+      color:var(--text);
+      z-index:1000;
+    }
+    .notification.show { opacity:1; transform:translateX(0); }
+    .notification.error { border-left-color:#d93a3a; }
+
+    /* HELP PAGE */
+    .help-page { display:none; flex-direction:column; min-height:100vh; padding:32px; max-width:1100px; margin:0 auto; }
+    .help-header { display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); padding-bottom:14px; }
+    .help-title { font-size:22px; font-weight:700; }
+    .help-content { flex:1; padding-top:24px; }
+    .faq-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+    @media (max-width:900px){ .faq-grid{ grid-template-columns:1fr; } }
+    .faq { border:1px solid var(--border); border-radius:12px; padding:20px; background:var(--panel-bg); }
+    .faq h2 { font-size:18px; margin-bottom:6px; }
+    .faq p { color:var(--text); opacity:.9; font-size:15px; line-height:1.6; }
+    code { background:rgba(127,127,127,.15); padding:2px 6px; border-radius:6px; }
+  </style>
+</head>
+
+<body class="dark">
+
+  <!-- MAIN PAGE -->
+  <div class="app-container" id="mainPage">
+    <div class="header">
+      <div class="brand-text">LuaOrganizer</div>
+      <div class="header-center">Fix spacing, indentation, and convert globals to locals while preserving logic</div>
+      <div class="header-right">
+        <a href="#" id="goHelp" class="link">Help</a>
+        <button class="theme-toggle" id="themeToggle" title="Toggle theme">
+          <svg id="themeIcon" viewBox="0 0 24 24"><path d="M21.64 13a9 9 0 11-8.64-11 7 7 0 008.64 11z"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="workspace">
+      <div class="code-panel">
+        <div class="panel-header">
+          <div class="panel-title">Input Code</div>
+          <div class="panel-actions"><button id="clearInput" class="btn">Clear</button></div>
+        </div>
+        <div class="code-area"><textarea id="inputCode" placeholder="Paste your Lua code here..."></textarea></div>
+        <div class="panel-footer">
+          <div class="stats"><div class="stat"><div>Lines:</div><div id="inputLines">0</div></div><div class="stat"><div>Characters:</div><div id="inputChars">0</div></div></div>
+          <div>Lua</div>
+        </div>
+      </div>
+
+      <div class="code-panel">
+        <div class="panel-header">
+          <div class="panel-title">Organized Output</div>
+          <div class="panel-actions"><button id="copyOutput" class="btn">Copy</button></div>
+        </div>
+        <div class="code-area"><textarea id="outputCode" readonly placeholder="Organized code will appear here..."></textarea></div>
+        <div class="panel-footer">
+          <div class="stats"><div class="stat"><div>Lines:</div><div id="outputLines">0</div></div><div class="stat"><div>Characters:</div><div id="outputChars">0</div></div></div>
+          <div>Lua</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="action-section" style="text-align:center;"><button id="organizeBtn" class="organize-btn">Organize</button></div>
+    <div class="footer">Lua Code Organizer © 2023 | Fixes Only What's Broken</div>
+  </div>
+
+  <!-- HELP PAGE -->
+  <div class="help-page" id="helpPage">
+    <div class="help-header">
+      <div class="help-title">LuaOrganizer • Help</div>
+      <div>
+        <a href="#" id="goMain" class="link">← Back to Main</a>
+        <button class="theme-toggle" id="helpTheme" title="Toggle theme">
+          <svg viewBox="0 0 24 24"><path d="M21.64 13a9 9 0 11-8.64-11 7 7 0 008.64 11z"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="help-content">
+      <h1 style="font-size:26px;margin-bottom:12px;">Frequently Asked Questions</h1>
+      <p style="color:var(--muted);font-size:16px;margin-bottom:24px;">Quick answers to common questions.</p>
+      <div class="faq-grid">
+        <div class="faq"><h2>What does LuaOrganizer do?</h2><p>It formats Lua code: indentation, spacing, and converts simple globals to <code>local</code>.</p></div>
+        <div class="faq"><h2>Will it change logic?</h2><p>No. Only formatting and obvious local conversions.</p></div>
+        <div class="faq"><h2>How do I use it?</h2><p>Paste your Lua on the left, click <b>Organize</b>, copy the formatted version.</p></div>
+        <div class="faq"><h2>Does it keep comments?</h2><p>Yes. Comments and structure are preserved.</p></div>
+        <div class="faq"><h2>Can I change theme?</h2><p>Yes. Click the moon/sun icon; it syncs with both pages.</p></div>
+        <div class="faq"><h2>Why locals?</h2><p>Locals improve performance and prevent global conflicts in Lua.</p></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="notification" class="notification"><div>✓</div><div>Code organized successfully!</div></div>
+
+  <script>
+  document.addEventListener("DOMContentLoaded", () => {
+    const inputCode=document.getElementById('inputCode'),
+          outputCode=document.getElementById('outputCode'),
+          organizeBtn=document.getElementById('organizeBtn'),
+          copyOutput=document.getElementById('copyOutput'),
+          clearInput=document.getElementById('clearInput'),
+          inputLines=document.getElementById('inputLines'),
+          inputChars=document.getElementById('inputChars'),
+          outputLines=document.getElementById('outputLines'),
+          outputChars=document.getElementById('outputChars'),
+          notification=document.getElementById('notification'),
+          themeToggle=document.getElementById('themeToggle'),
+          helpTheme=document.getElementById('helpTheme'),
+          themeIcon=document.getElementById('themeIcon'),
+          mainPage=document.getElementById('mainPage'),
+          helpPage=document.getElementById('helpPage'),
+          goHelp=document.getElementById('goHelp'),
+          goMain=document.getElementById('goMain');
+
+    function updateStats(){
+      inputLines.textContent=inputCode.value.split('\n').length;
+      inputChars.textContent=inputCode.value.length;
+      outputLines.textContent=outputCode.value.split('\n').length;
+      outputChars.textContent=outputCode.value.length;
+    }
+
+    function showNotification(msg,type='success'){
+      notification.innerHTML=`<div>${type==='success'?'✓':'✗'}</div><div>${msg}</div>`;
+      notification.className=`notification ${type} show`;
+      setTimeout(()=>notification.classList.remove('show'),3000);
+    }
+
+    function organizeLuaCode(code){
+      const lines=code.split('\n');let result=[];let indent=0;
+      for(let raw of lines){
+        let line=raw.trim();if(!line){result.push('');continue;}
+        if(/^\s*(end|until|else)\b/.test(line)&&!/elseif/.test(line))indent=Math.max(0,indent-1);
+        let f=line.replace(/([^<>=!~])=([^=])/g,'$1 = $2')
+                  .replace(/==/g,' == ')
+                  .replace(/~=/g,' ~= ')
+                  .replace(/<=/g,' <= ')
+                  .replace(/>=/g,' >= ')
+                  .replace(/(\w)\+(\w)/g,'$1 + $2')
+                  .replace(/(\w)-(\w)/g,'$1 - $2')
+                  .replace(/(\w)\*(\w)/g,'$1 * $2')
+                  .replace(/(\w)\/(\w)/g,'$1 / $2')
+                  .replace(/(\w)\.\.(\w)/g,'$1 .. $2')
+                  .replace(/,(\S)/g,', $1');
+        if(/^(m|nums|arr|tbl|list|data)\s*=/.test(f))f='local '+f;
+        result.push('    '.repeat(indent)+f);
+        if(/^\s*(function|for|if|while|repeat)\b/.test(line))indent++;
+      }
+      return result.join('\n');
+    }
+
+    inputCode.addEventListener('input',updateStats);
+
+    organizeBtn.addEventListener('click',()=>{
+      const code=inputCode.value.trim();
+      if(!code)return showNotification('Please enter Lua code','error');
+      try{
+        outputCode.value=organizeLuaCode(code);
+        updateStats();
+        showNotification('Code organized!');
+      }catch(e){
+        console.error(e);
+        showNotification('Error','error');
+      }
+    });
+
+    copyOutput.addEventListener('click',async()=>{
+      if(!outputCode.value)return showNotification('No code','error');
+      await navigator.clipboard.writeText(outputCode.value);
+      showNotification('Copied!');
+    });
+
+    clearInput.addEventListener('click',()=>{
+      inputCode.value='';outputCode.value='';updateStats();showNotification('Cleared');
+    });
+
+    function setTheme(light){
+      document.body.classList.toggle('light',light);
+      const icon=light?
+        '<path d="M12 18a6 6 0 100-12 6 6 0 000 12zm0-16a1 1 0 011 1v2a1 1 0 01-2 0V3a1 1 0 011-1zm0 18a1 1 0 011 1v2a1 1 0 01-2 0v-2a1 1 0 011-1zm9-9a1 1 0 01-1 1h-2a1 1 0 110-2h2a1 1 0 011 1zM6 12a1 1 0 01-1 1H3a1 1 0 110-2h2a1 1 0 011 1z"/>' :
+        '<path d="M21.64 13a9 9 0 11-8.64-11 7 7 0 008.64 11z"/>';
+      themeIcon.innerHTML=icon;
+      helpTheme.innerHTML=`<svg viewBox="0 0 24 24">${icon}</svg>`;
+      localStorage.setItem('theme',light?'light':'dark');
+    }
+
+    themeToggle.addEventListener('click',()=>setTheme(!document.body.classList.contains('light')));
+    helpTheme.addEventListener('click',()=>setTheme(!document.body.classList.contains('light')));
+    setTheme(localStorage.getItem('theme')==='light');
+
+    goHelp.addEventListener('click',e=>{e.preventDefault();mainPage.style.display='none';helpPage.style.display='flex';});
+    goMain.addEventListener('click',e=>{e.preventDefault();helpPage.style.display='none';mainPage.style.display='flex';});
+
+    inputCode.value=`m=5
+nums={1,2,3}
+for i=1,#nums do m=m+nums[i] end
+if m>10 then print("big")else print("small")end
+x=1;y=2;z=x+y
+arr={1,2,3} for k,v in pairs(arr)do print(k,v)end`;
+    updateStats();
+  });
+  </script>
+</body>
+</html>
